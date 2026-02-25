@@ -12,13 +12,17 @@
     Number of days to look back for new escalations (default: 7)
 .PARAMETER ReportPath
     Path to the working report file (default: escalations-report.md)
+.PARAMETER NoDrop
+    Skip dropping resolved entries. Use this when re-running before you have emailed the report.
 .EXAMPLE
     .\Update-EscReport.ps1
     .\Update-EscReport.ps1 -Days 14
+    .\Update-EscReport.ps1 -NoDrop
 #>
 param(
     [int]$Days = 7,
-    [string]$ReportPath = "escalations-report.md"
+    [string]$ReportPath = "escalations-report.md",
+    [switch]$NoDrop
 )
 
 $ErrorActionPreference = "Stop"
@@ -242,23 +246,28 @@ Write-Host "Existing entries in report: $($existingEntries.Count)" -ForegroundCo
 $keepEntries = @()
 $droppedKeys = @{}  # track dropped keys so they aren't re-added as new
 $droppedCount = 0
-foreach ($entry in $existingEntries) {
-    $fixText = ("$($entry.FixVersion)").Trim()
-    # Only drop if Jira-linked AND fix version is a real version (not freetext notes)
-    # Preserve entries with TBC, WIP, Monitoring, Awaiting, Investigating, Ongoing
-    $isFreetext = $fixText -match '(?i)\b(TBC|WIP|Monitoring|Awaiting|Investigating|Ongoing)\b'
-    $hasCommunicatedFixVersion = $entry.HasJiraLink -and -not [string]::IsNullOrWhiteSpace($fixText) -and -not $isFreetext
+if ($NoDrop) {
+    Write-Host "  -NoDrop: skipping drop logic" -ForegroundColor Yellow
+    $keepEntries = $existingEntries
+} else {
+    foreach ($entry in $existingEntries) {
+        $fixText = ("$($entry.FixVersion)").Trim()
+        # Only drop if Jira-linked AND fix version is a real version (not freetext notes)
+        # Preserve entries with TBC, WIP, Monitoring, Awaiting, Investigating, Ongoing
+        $isFreetext = $fixText -match '(?i)\b(TBC|WIP|Monitoring|Awaiting|Investigating|Ongoing)\b'
+        $hasCommunicatedFixVersion = $entry.HasJiraLink -and -not [string]::IsNullOrWhiteSpace($fixText) -and -not $isFreetext
 
-    if ($hasCommunicatedFixVersion) {
-        Write-Host "  Dropping (fix version communicated): $($entry.Key) $emDash $($entry.FixVersion)" -ForegroundColor DarkGray
-        if ($entry.Key) { $droppedKeys[$entry.Key] = $true }
-        $droppedCount++
-    } else {
-        $keepEntries += $entry
+        if ($hasCommunicatedFixVersion) {
+            Write-Host "  Dropping (fix version communicated): $($entry.Key) $emDash $($entry.FixVersion)" -ForegroundColor DarkGray
+            if ($entry.Key) { $droppedKeys[$entry.Key] = $true }
+            $droppedCount++
+        } else {
+            $keepEntries += $entry
+        }
     }
-}
-if ($droppedCount -gt 0) {
-    Write-Host "Dropped $droppedCount resolved entries`n" -ForegroundColor Yellow
+    if ($droppedCount -gt 0) {
+        Write-Host "Dropped $droppedCount resolved entries`n" -ForegroundColor Yellow
+    }
 }
 
 # 3. Update existing entries from Jira (only those with Jira links)
