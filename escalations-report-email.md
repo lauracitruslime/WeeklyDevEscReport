@@ -5,9 +5,7 @@
 | Title | Description | Fix Version | Jira Key |
 |-------|-------------|-------------|----------|
 | Logging // Downgrade Missing DNSName in Yarp Logs | Reducing error log noise - a missing domain in a request means it can't complete. Calum has a Jira to downgrade the logs to a warning and investigate. | TBC | [CLECOM-11231](https://citruslime.atlassian.net/browse/CLECOM-11231) |
-| Omnisend // Add Product Vendor to Order Fulfilled & add Product Activity to Order Placed / Order Fulfilled | Why? What? Example section of an Order Fulfilled from Omnisend BEFORE change: { | TBC | [CLECOM-11268](https://citruslime.atlassian.net/browse/CLECOM-11268) |
 | Yarp // Csp Violation Cleanup - February 2026 | Why? Alongside daily monitoring for security and stability, we have agreed to clean up CSP violations for non-urgent blocks every month. This aims to keep logging clean and make it easier to spot fals... | TBC | [CLECOM-11256](https://citruslime.atlassian.net/browse/CLECOM-11256) |
-| Monitoring // Introduce Post-Hotpatch Monitoring Procedure for Release Owner | Why? What? | TBC | [CLECOM-11240](https://citruslime.atlassian.net/browse/CLECOM-11240) |
 | Checkout // V12 Orders Never Complete - Status 409 | Why? What? We are seeing Status 409 for V12 Order finalisations. The ‘ReturnURL’ for V12 is set per site, and it [site] /checkout/api/v12/confirm?REF= [FinanceApplicationId]. We can use Yarp’s HTTP lo... | Checkout - 24th February 2026 (2026-02-26) | [CLECOM-11260](https://citruslime.atlassian.net/browse/CLECOM-11260) |
 | CitrusStore // Products timing out due to inefficient SQL | Why? What? Example error:    Filter to show other examples:    Improve the SQL which is timing out. How? The offending SQL query appears in  ProductPageServiceDataLoaderDirectDb.vb This LINQ results i... | Checkout - 18th March 2026 - Major Release (2026-03-18) | [CLECOM-11242](https://citruslime.atlassian.net/browse/CLECOM-11242) |
 
