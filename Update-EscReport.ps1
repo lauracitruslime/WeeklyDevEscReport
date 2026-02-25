@@ -5,7 +5,7 @@
     Queries Jira for issues tagged with SupportTeamEscalation across CLOUDPOS, DEVOP, and CLECOM boards.
     Maintains a Markdown report with lifecycle management:
     - New escalations are added with TBC fix version
-    - Existing entries are updated with current Status/Fix Version
+    - Existing entries are updated with current Fix Version
     - Entries that had a fix version in the previous report are dropped
     Each run saves a dated copy to the reports/ folder.
 .PARAMETER Days
@@ -67,19 +67,25 @@ function Invoke-JiraApi {
 function Search-JiraIssues {
     param([string]$Jql, [string[]]$Fields)
     $allIssues = @()
-    $startAt = 0
-    $maxResults = 50
+    $nextPageToken = $null
+    $maxPages = 20  # safeguard against infinite pagination
+    $page = 0
     do {
         $body = @{
             jql        = $Jql
-            maxResults = $maxResults
-            startAt    = $startAt
+            maxResults = 100
             fields     = $Fields
         }
+        if ($nextPageToken) {
+            $body.nextPageToken = $nextPageToken
+        }
         $result = Invoke-JiraApi -Endpoint "search/jql" -Method Post -Body $body
-        $allIssues += $result.issues
-        $startAt += $maxResults
-    } while ($startAt -lt $result.total)
+        if ($result.issues) {
+            $allIssues += $result.issues
+        }
+        $nextPageToken = $result.nextPageToken
+        $page++
+    } while ($nextPageToken -and $page -lt $maxPages)
     return $allIssues
 }
 
@@ -117,34 +123,72 @@ function Get-FixVersionText {
     return ($parts -join ", ")
 }
 
-# ── Parse existing report ──────────────────────────────────────────────────
+# ── Parse existing report (block format) ────────────────────────────────────
 function Read-EscReport {
     param([string]$Path)
     $entries = @()
     if (-not (Test-Path $Path)) { return $entries }
 
+    $currentSection = $null
+    $current = $null
     $lines = Get-Content $Path
-    foreach ($line in $lines) {
-        # Match table rows: | Title | Description | Status | Fix Version | [Key](url) |
-        if ($line -match '^\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+?)\s*\|\s*\[([A-Z]+-\d+)\]\((.+?)\)\s*\|$') {
-            $title = $matches[1].Trim()
-            # Skip header row
-            if ($title -eq "Title") { continue }
 
-            $entries += [PSCustomObject]@{
+    foreach ($line in $lines) {
+        # Track section headers
+        if ($line -match '^##\s+(.+)$') {
+            $currentSection = $matches[1].Trim()
+        }
+
+        # **Issue:** line starts a new entry
+        if ($line -match '^\*\*Issue:\*\*\s*(.+)$') {
+            # Save previous entry if exists
+            if ($current) { $entries += $current }
+
+            $issueLine = $matches[1].Trim()
+            $key = $null; $url = $null; $title = $issueLine; $hasLink = $false
+
+            # Extract [KEY](url) from end of issue line
+            if ($issueLine -match '//\s*\[([A-Z]+-\d+)\]\((.+?)\)\s*$') {
+                $key = $matches[1]
+                $url = $matches[2]
+                $hasLink = $true
+                # Title is everything before the // [KEY](url)
+                $title = ($issueLine -replace '\s*//\s*\[[A-Z]+-\d+\]\(.+?\)\s*$', '').Trim()
+            }
+
+            $current = [PSCustomObject]@{
                 Title       = $title
-                Description = $matches[2].Trim()
-                Status      = $matches[3].Trim()
-                FixVersion  = $matches[4].Trim()
-                Key         = $matches[5].Trim()
-                Url         = $matches[6].Trim()
+                ReportedBy  = ""
+                Description = ""
+                FixVersion  = "TBC"
+                Key         = $key
+                Url         = $url
+                Section     = $currentSection
+                HasJiraLink = $hasLink
+            }
+        }
+        elseif ($current) {
+            if ($line -match '^\*\*Reported by:\*\*\s*(.+)$') {
+                $current.ReportedBy = $matches[1].Trim()
+            }
+            elseif ($line -match '^\*\*Description:\*\*\s*(.+)$') {
+                $current.Description = $matches[1].Trim()
+            }
+            elseif ($line -match '^\*\*Status:\*\*') {
+                # Status field ignored (removed from format)
+            }
+            elseif ($line -match '^\*\*Fix Version:\*\*\s*(.+)$') {
+                $current.FixVersion = $matches[1].Trim()
             }
         }
     }
+    # Don't forget the last entry
+    if ($current) { $entries += $current }
+
     return $entries
 }
 
-# ── Write report to markdown ───────────────────────────────────────────────
+# ── Write report to markdown (block format) ────────────────────────────────
 function Write-EscReport {
     param(
         [string]$Path,
@@ -153,17 +197,32 @@ function Write-EscReport {
     $date = Get-Date -Format "yyyy-MM-dd"
     $lines = @()
     $lines += "# Dev Escalations Report — $date"
-    $lines += ""
-    $lines += "| Title | Description | Status | Fix Version | Jira Key |"
-    $lines += "|-------|-------------|--------|-------------|----------|"
 
+    # Group entries by section, preserving order
+    $sections = [ordered]@{}
     foreach ($entry in $Entries) {
-        $title = $entry.Title -replace '\|', '¦'
-        $desc = $entry.Description -replace '\|', '¦'
-        $status = $entry.Status -replace '\|', '¦'
-        $fix = $entry.FixVersion -replace '\|', '¦'
-        $link = "[$($entry.Key)]($($entry.Url))"
-        $lines += "| $title | $desc | $status | $fix | $link |"
+        $sec = if ($entry.Section) { $entry.Section } else { "Escalations" }
+        if (-not $sections.Contains($sec)) {
+            $sections[$sec] = @()
+        }
+        $sections[$sec] += $entry
+    }
+
+    foreach ($sectionName in $sections.Keys) {
+        $lines += ""
+        $lines += "## $sectionName"
+
+        foreach ($entry in $sections[$sectionName]) {
+            $lines += ""
+            if ($entry.HasJiraLink -and $entry.Url) {
+                $lines += "**Issue:** $($entry.Title) // [$($entry.Key)]($($entry.Url))"
+            } else {
+                $lines += "**Issue:** $($entry.Title)"
+            }
+            $lines += "**Reported by:** $($entry.ReportedBy)"
+            $lines += "**Description:** $($entry.Description)"
+            $lines += "**Fix Version:** $($entry.FixVersion)"
+        }
     }
 
     $lines += ""
@@ -173,7 +232,53 @@ function Write-EscReport {
     Set-Content -Path $Path -Value ($lines -join "`n") -Encoding UTF8
 }
 
-# ═══════════════════════════════════════════════════════════════════════════
+# ── Write email-friendly table version ────────────────────────────────────────
+function Write-EscReportTable {
+    param(
+        [string]$Path,
+        [object[]]$Entries
+    )
+    $date = Get-Date -Format "yyyy-MM-dd"
+    $lines = @()
+    $lines += "# Dev Escalations Report — $date"
+
+    $sections = [ordered]@{}
+    foreach ($entry in $Entries) {
+        $sec = if ($entry.Section) { $entry.Section } else { "Escalations" }
+        if (-not $sections.Contains($sec)) {
+            $sections[$sec] = @()
+        }
+        $sections[$sec] += $entry
+    }
+
+    foreach ($sectionName in $sections.Keys) {
+        $lines += ""
+        $lines += "## $sectionName"
+        $lines += ""
+        $lines += "| Title | Description | Fix Version | Jira Key |"
+        $lines += "|-------|-------------|-------------|----------|"
+
+        foreach ($entry in $sections[$sectionName]) {
+            $title = $entry.Title -replace '\|', '¦'
+            $desc = $entry.Description -replace '\|', '¦'
+            $fix = $entry.FixVersion -replace '\|', '¦'
+            if ($entry.HasJiraLink -and $entry.Url) {
+                $jiraCol = "[$($entry.Key)]($($entry.Url))"
+            } else {
+                $jiraCol = if ($entry.Key) { $entry.Key } else { "-" }
+            }
+            $lines += "| $title | $desc | $fix | $jiraCol |"
+        }
+    }
+
+    $lines += ""
+    $lines += "---"
+    $lines += "*Generated $(Get-Date -Format 'yyyy-MM-dd HH:mm') by Update-EscReport.ps1*"
+
+    Set-Content -Path $Path -Value ($lines -join "`n") -Encoding UTF8
+}
+
+# ═════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -185,11 +290,18 @@ $existingEntries = @(Read-EscReport -Path $ReportPath)
 Write-Host "Existing entries in report: $($existingEntries.Count)" -ForegroundColor Yellow
 
 # 2. Remove entries that had a fix version in the previous report (already communicated)
+#    Only drop Jira-linked entries where the Fix Version is clearly not TBC.
+#    (We treat any Fix Version containing 'TBC' as unresolved.)
 $keepEntries = @()
 $droppedCount = 0
 foreach ($entry in $existingEntries) {
-    if ($entry.FixVersion -ne "TBC") {
-        # This entry had a fix version last time — drop it
+    $fixText = ("$($entry.FixVersion)").Trim()
+    # Only drop if Jira-linked AND fix version is a real version (not freetext notes)
+    # Preserve entries with TBC, WIP, Monitoring, Awaiting, Investigating, Ongoing
+    $isFreetext = $fixText -match '(?i)\b(TBC|WIP|Monitoring|Awaiting|Investigating|Ongoing)\b'
+    $hasCommunicatedFixVersion = $entry.HasJiraLink -and -not [string]::IsNullOrWhiteSpace($fixText) -and -not $isFreetext
+
+    if ($hasCommunicatedFixVersion) {
         Write-Host "  Dropping (fix version communicated): $($entry.Key) — $($entry.FixVersion)" -ForegroundColor DarkGray
         $droppedCount++
     } else {
@@ -200,25 +312,28 @@ if ($droppedCount -gt 0) {
     Write-Host "Dropped $droppedCount resolved entries`n" -ForegroundColor Yellow
 }
 
-# 3. Update existing entries from Jira
+# 3. Update existing entries from Jira (only those with Jira links)
 $updatedEntries = @()
 $existingKeys = @{}
 foreach ($entry in $keepEntries) {
-    $existingKeys[$entry.Key] = $true
-    Write-Host "  Updating $($entry.Key)..." -ForegroundColor Gray -NoNewline
-    try {
-        $issue = Get-JiraIssue -Key $entry.Key
-        $entry.Title = $issue.fields.summary
-        # Preserve manually edited description — only set if it was empty
-        if ([string]::IsNullOrWhiteSpace($entry.Description) -or $entry.Description -eq "-") {
-            $entry.Description = Get-PlainTextFromAdf -Adf $issue.fields.description
-            if ([string]::IsNullOrWhiteSpace($entry.Description)) { $entry.Description = "-" }
+    if ($entry.Key) { $existingKeys[$entry.Key] = $true }
+    if ($entry.HasJiraLink) {
+        Write-Host "  Updating $($entry.Key)..." -ForegroundColor Gray -NoNewline
+        try {
+            $issue = Get-JiraIssue -Key $entry.Key
+            $entry.Title = $issue.fields.summary
+            # Preserve manually edited description — only set if it was empty
+            if ([string]::IsNullOrWhiteSpace($entry.Description) -or $entry.Description -eq "-") {
+                $entry.Description = Get-PlainTextFromAdf -Adf $issue.fields.description
+                if ([string]::IsNullOrWhiteSpace($entry.Description)) { $entry.Description = "-" }
+            }
+            $entry.FixVersion = Get-FixVersionText -FixVersions $issue.fields.fixVersions
+            Write-Host " $($entry.FixVersion)" -ForegroundColor Green
+        } catch {
+            Write-Host " Failed to fetch: $_" -ForegroundColor Red
         }
-        $entry.Status = $issue.fields.status.name
-        $entry.FixVersion = Get-FixVersionText -FixVersions $issue.fields.fixVersions
-        Write-Host " $($entry.Status) / $($entry.FixVersion)" -ForegroundColor Green
-    } catch {
-        Write-Host " Failed to fetch: $_" -ForegroundColor Red
+    } else {
+        Write-Host "  Keeping manual entry: $($entry.Title)" -ForegroundColor Gray
     }
     $updatedEntries += $entry
 }
@@ -229,7 +344,7 @@ $jql = "project in ($projectList) AND labels = `"$jiraTag`" AND created >= -${Da
 Write-Host "`nSearching for new escalations..." -ForegroundColor Cyan
 Write-Host "  JQL: $jql" -ForegroundColor DarkGray
 
-$fields = @("summary", "status", "created", "fixVersions", "labels", "description")
+$fields = @("summary", "created", "fixVersions", "labels", "description", "reporter")
 $newIssues = @(Search-JiraIssues -Jql $jql -Fields $fields)
 Write-Host "  Found $($newIssues.Count) issue(s) matching query" -ForegroundColor Yellow
 
@@ -245,13 +360,26 @@ foreach ($issue in $newIssues) {
     $desc = Get-PlainTextFromAdf -Adf $issue.fields.description
     if ([string]::IsNullOrWhiteSpace($desc)) { $desc = "-" }
 
+    # Determine section based on project key
+    $project = $key -replace '-\d+$', ''
+    $section = switch ($project) {
+        "CLOUDPOS" { "Cloud POS Escalations" }
+        "DEVOP"    { "DevOps Escalations" }
+        default    { "Ecommerce Escalations" }
+    }
+
+    # Use Jira reporter as initial "Reported by"
+    $reporter = if ($issue.fields.reporter) { $issue.fields.reporter.displayName } else { "-" }
+
     $newEntry = [PSCustomObject]@{
         Title       = $issue.fields.summary
+        ReportedBy  = $reporter
         Description = $desc
-        Status      = $issue.fields.status.name
         FixVersion  = Get-FixVersionText -FixVersions $issue.fields.fixVersions
         Key         = $key
         Url         = "$jiraBase/browse/$key"
+        Section     = $section
+        HasJiraLink = $true
     }
     $updatedEntries += $newEntry
     Write-Host "  + $key — $($newEntry.Title)" -ForegroundColor Green
@@ -260,8 +388,10 @@ foreach ($issue in $newIssues) {
 
 Write-Host "`nAdded $addedCount new escalation(s)" -ForegroundColor Yellow
 
-# 5. Write updated report
+# 5. Write updated report (block format = working file, table format = email copy)
 Write-EscReport -Path $ReportPath -Entries $updatedEntries
+$emailPath = $ReportPath -replace '\.md$', '-email.md'
+Write-EscReportTable -Path $emailPath -Entries $updatedEntries
 
 # 6. Save dated archive copy
 $reportsDir = Join-Path $scriptDir "reports"
@@ -274,6 +404,7 @@ Copy-Item -Path $ReportPath -Destination $archivePath -Force
 
 Write-Host "`n══ Report Updated ══" -ForegroundColor Cyan
 Write-Host "  Working report: $ReportPath" -ForegroundColor Green
+Write-Host "  Email version:  $emailPath" -ForegroundColor Green
 Write-Host "  Archived copy:  $archivePath" -ForegroundColor Green
 Write-Host "  Total entries:   $($updatedEntries.Count)" -ForegroundColor Green
 Write-Host ""
