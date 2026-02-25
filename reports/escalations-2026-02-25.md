@@ -49,4 +49,4 @@
 | Gift Vouchers // Gift Voucher expiry - POS treats as expired but Back Office shows as valid | There is currently an issue where gift vouchers show as ‘valid’ in Back Office on their expiry date, but then cannot be redeemed on said date. Although it feels like the voucher is valid until the end of that day, the system instead treats it as expired, displaying an error such as: “This voucher has expired". Back Office shows it as valid, but POS says it’s expired. | TBC | [CLOUDPOS-11713](https://citruslime.atlassian.net/browse/CLOUDPOS-11713) |
 
 ---
-*Generated 2026-02-25 13:11 by Update-EscReport.ps1*
+*Generated 2026-02-25 13:16 by Update-EscReport.ps1*
