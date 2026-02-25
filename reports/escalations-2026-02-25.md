@@ -8,13 +8,6 @@
 | Yarp // Csp Violation Cleanup - February 2026 | Alongside daily monitoring for security and stability, we have agreed to clean up CSP violations for non-urgent blocks every month. This aims to keep logging clean and make it easier to spot false blocks. | TBC | [CLECOM-11256](https://citruslime.atlassian.net/browse/CLECOM-11256) |
 | Checkout // V12 Orders Never Complete - Status 409 | We were seeing Status 409 for V12 Order finalisations. This was caused by introduction of middleware which validates the confirm page with cookies. If the user finishes their V12 order on a differenct device or browser, this meant the V12 application would never download as an order when finished. | Checkout - 24th February 2026 (2026-02-26) | [CLECOM-11260](https://citruslime.atlassian.net/browse/CLECOM-11260) |
 | CitrusStore // Products timing out due to inefficient SQL | This was reported by CSOL, who had a product timing out on their website. Investigation into the cause revealed that the timeout is data-driven, but linked to an inefficient SQL query which produces a very large number of rows. This error is occurring for multiple items, across multiple sites, not just this item for CSOL. NB, we have resolved this item for them by removing duff FAQ submissions. This error occurs 200-300 times/day and prevents customers from purchasing an affected product. | Checkout - 18th March 2026 - Major Release (2026-03-18) | [CLECOM-11242](https://citruslime.atlassian.net/browse/CLECOM-11242) |
-| Omnisend // Add Product Vendor to Order Fulfilled & add Product Activity to Order Placed / Order Fulfilled | Why? What? Example section of an Order Fulfilled from Omnisend BEFORE change: {
-  "createdAt": "2025-12-14T15:06:02Z",
-  "currency": "GBP",
-  "fulfillmentStatus": "fulfilled",
-  "lineItems": [
-  ... | TBC | [CLECOM-11268](https://citruslime.atlassian.net/browse/CLECOM-11268) |
-| Monitoring // Introduce Post-Hotpatch Monitoring Procedure for Release Owner | Why? What? | TBC | [CLECOM-11240](https://citruslime.atlassian.net/browse/CLECOM-11240) |
 
 ## Cloud POS Escalations
 
