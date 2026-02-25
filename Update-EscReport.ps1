@@ -400,7 +400,7 @@ if (-not (Test-Path $reportsDir)) {
 }
 $dateStamp = Get-Date -Format "yyyy-MM-dd"
 $archivePath = Join-Path $reportsDir "escalations-$dateStamp.md"
-Copy-Item -Path $ReportPath -Destination $archivePath -Force
+Copy-Item -Path $emailPath -Destination $archivePath -Force
 
 Write-Host "`n══ Report Updated ══" -ForegroundColor Cyan
 Write-Host "  Working report: $ReportPath" -ForegroundColor Green
