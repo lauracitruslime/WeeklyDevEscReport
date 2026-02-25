@@ -123,72 +123,60 @@ function Get-FixVersionText {
     return ($parts -join ", ")
 }
 
-# ── Parse existing report (block format) ────────────────────────────────────
+# ── Parse existing report (table format) ────────────────────────────────────
 function Read-EscReport {
     param([string]$Path)
     $entries = @()
     if (-not (Test-Path $Path)) { return $entries }
 
     $currentSection = $null
-    $current = $null
-    $lines = Get-Content $Path
+    $lines = Get-Content $Path -Encoding UTF8
 
     foreach ($line in $lines) {
         # Track section headers
         if ($line -match '^##\s+(.+)$') {
             $currentSection = $matches[1].Trim()
+            continue
         }
 
-        # **Issue:** line starts a new entry
-        if ($line -match '^\*\*Issue:\*\*\s*(.+)$') {
-            # Save previous entry if exists
-            if ($current) { $entries += $current }
+        # Skip non-table lines, header rows, and separator rows
+        if ($line -notmatch '^\|') { continue }
+        if ($line -match '^\|\s*Title\s*\|') { continue }
+        if ($line -match '^\|\s*-') { continue }
 
-            $issueLine = $matches[1].Trim()
-            $key = $null; $url = $null; $title = $issueLine; $hasLink = $false
+        # Parse table row: | Title | Description | Fix Version | Jira Key |
+        $cells = $line -split '\|'
+        if ($cells.Count -lt 5) { continue }
 
-            # Extract [KEY](url) from end of issue line
-            if ($issueLine -match '//\s*\[([A-Z]+-\d+)\]\((.+?)\)\s*$') {
-                $key = $matches[1]
-                $url = $matches[2]
-                $hasLink = $true
-                # Title is everything before the // [KEY](url)
-                $title = ($issueLine -replace '\s*//\s*\[[A-Z]+-\d+\]\(.+?\)\s*$', '').Trim()
-            }
+        $titleCell = $cells[1].Trim() -replace [char]0x00A6, '|'   # unescape ¦
+        $descCell  = $cells[2].Trim() -replace [char]0x00A6, '|'
+        $fixCell   = $cells[3].Trim() -replace [char]0x00A6, '|'
+        $jiraCell  = $cells[4].Trim()
 
-            $current = [PSCustomObject]@{
-                Title       = $title
-                ReportedBy  = ""
-                Description = ""
-                FixVersion  = "TBC"
-                Key         = $key
-                Url         = $url
-                Section     = $currentSection
-                HasJiraLink = $hasLink
-            }
+        # Parse Jira key/url from the Jira Key column
+        $key = $null; $url = $null; $hasLink = $false
+        if ($jiraCell -match '^\[([A-Z]+-\d+)\]\((.+?)\)$') {
+            $key = $matches[1]
+            $url = $matches[2]
+            $hasLink = $true
         }
-        elseif ($current) {
-            if ($line -match '^\*\*Reported by:\*\*\s*(.+)$') {
-                $current.ReportedBy = $matches[1].Trim()
-            }
-            elseif ($line -match '^\*\*Description:\*\*\s*(.+)$') {
-                $current.Description = $matches[1].Trim()
-            }
-            elseif ($line -match '^\*\*Status:\*\*') {
-                # Status field ignored (removed from format)
-            }
-            elseif ($line -match '^\*\*Fix Version:\*\*\s*(.+)$') {
-                $current.FixVersion = $matches[1].Trim()
-            }
+
+        $entries += [PSCustomObject]@{
+            Title       = $titleCell
+            ReportedBy  = ""
+            Description = $descCell
+            FixVersion  = $fixCell
+            Key         = $key
+            Url         = $url
+            Section     = $currentSection
+            HasJiraLink = $hasLink
         }
     }
-    # Don't forget the last entry
-    if ($current) { $entries += $current }
 
     return $entries
 }
 
-# ── Write report to markdown (block format) ────────────────────────────────
+# ── Write report to markdown (table format) ────────────────────────────────
 function Write-EscReport {
     param(
         [string]$Path,
@@ -199,49 +187,6 @@ function Write-EscReport {
     $lines += "# Dev Escalations Report — $date"
 
     # Group entries by section, preserving order
-    $sections = [ordered]@{}
-    foreach ($entry in $Entries) {
-        $sec = if ($entry.Section) { $entry.Section } else { "Escalations" }
-        if (-not $sections.Contains($sec)) {
-            $sections[$sec] = @()
-        }
-        $sections[$sec] += $entry
-    }
-
-    foreach ($sectionName in $sections.Keys) {
-        $lines += ""
-        $lines += "## $sectionName"
-
-        foreach ($entry in $sections[$sectionName]) {
-            $lines += ""
-            if ($entry.HasJiraLink -and $entry.Url) {
-                $lines += "**Issue:** $($entry.Title) // [$($entry.Key)]($($entry.Url))"
-            } else {
-                $lines += "**Issue:** $($entry.Title)"
-            }
-            $lines += "**Reported by:** $($entry.ReportedBy)"
-            $lines += "**Description:** $($entry.Description)"
-            $lines += "**Fix Version:** $($entry.FixVersion)"
-        }
-    }
-
-    $lines += ""
-    $lines += "---"
-    $lines += "*Generated $(Get-Date -Format 'yyyy-MM-dd HH:mm') by Update-EscReport.ps1*"
-
-    Set-Content -Path $Path -Value ($lines -join "`n") -Encoding UTF8
-}
-
-# ── Write email-friendly table version ────────────────────────────────────────
-function Write-EscReportTable {
-    param(
-        [string]$Path,
-        [object[]]$Entries
-    )
-    $date = Get-Date -Format "yyyy-MM-dd"
-    $lines = @()
-    $lines += "# Dev Escalations Report — $date"
-
     $sections = [ordered]@{}
     foreach ($entry in $Entries) {
         $sec = if ($entry.Section) { $entry.Section } else { "Escalations" }
@@ -388,10 +333,8 @@ foreach ($issue in $newIssues) {
 
 Write-Host "`nAdded $addedCount new escalation(s)" -ForegroundColor Yellow
 
-# 5. Write updated report (block format = working file, table format = email copy)
+# 5. Write updated report
 Write-EscReport -Path $ReportPath -Entries $updatedEntries
-$emailPath = $ReportPath -replace '\.md$', '-email.md'
-Write-EscReportTable -Path $emailPath -Entries $updatedEntries
 
 # 6. Save dated archive copy
 $reportsDir = Join-Path $scriptDir "reports"
@@ -400,11 +343,10 @@ if (-not (Test-Path $reportsDir)) {
 }
 $dateStamp = Get-Date -Format "yyyy-MM-dd"
 $archivePath = Join-Path $reportsDir "escalations-$dateStamp.md"
-Copy-Item -Path $emailPath -Destination $archivePath -Force
+Copy-Item -Path $ReportPath -Destination $archivePath -Force
 
 Write-Host "`n══ Report Updated ══" -ForegroundColor Cyan
-Write-Host "  Working report: $ReportPath" -ForegroundColor Green
-Write-Host "  Email version:  $emailPath" -ForegroundColor Green
+Write-Host "  Report:         $ReportPath" -ForegroundColor Green
 Write-Host "  Archived copy:  $archivePath" -ForegroundColor Green
 Write-Host "  Total entries:   $($updatedEntries.Count)" -ForegroundColor Green
 Write-Host ""
