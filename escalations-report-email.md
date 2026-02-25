@@ -25,8 +25,8 @@
 
 | Title | Description | Fix Version | Jira Key |
 |-------|-------------|-------------|----------|
-| Outages to WEB28 - 18th, 19th, 20th February | Kevin and I have been investigating this whilst Max has been working on PCI. The incidents are short but recurrent, for a small number of sites. Yarp marks them as unhealthy and a maintenance page is shown. Kevin is continuing his work on this. | Ongoing Investigation | - |
-| Investigation // Yarp Marking Websites as Unhealthy - during Backup? | Why? What? Attached spreadsheet shows examples of Yarp marking sites as unhealthy through the night. The same data can be obtained using the following Axiom query: ['ecommerce-yarp-application-logs-pr... | TBC | [DEVOP-2211](https://citruslime.atlassian.net/browse/DEVOP-2211) |
+| Outages to WEB28 - 18th, 19th, 20th February |Kevin, Neil and I looked into this. The incidents are short but recurrent, for a small number of sites. Yarp marks them as unhealthy and a maintenance page is shown. We have taken immediate steps to resolve, and are currently monitoring. Things look good so far. | Monitoring after reboots | - |
+| Investigation // Yarp Marking Websites as Unhealthy - during Backup? | Kev and I spotted this during other investigation. This relates to Yarp marking some sites as unhealthy at 2am. Kev is going to look into this when he gets the chance. | TBC | [DEVOP-2211](https://citruslime.atlassian.net/browse/DEVOP-2211) |
 
 ## Issues with no ETA on Last Report
 
