@@ -40,7 +40,7 @@ function Load-DotEnv {
             
             # Set environment variable
             Set-Item -Path "env:$name" -Value $value
-            Write-Host "  ✓ $name" -ForegroundColor Green
+            Write-Host "  [ok] $name" -ForegroundColor Green
             $loaded++
         }
     }

@@ -23,6 +23,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $scriptDir = $PSScriptRoot
+$emDash = [char]0x2014      # — (avoid literal non-ASCII in source)
+$brokenBar = [char]0x00A6   # ¦ (pipe escape for markdown tables)
 
 # ── Load environment variables ──────────────────────────────────────────────
 . "$scriptDir\Load-Env.ps1"
@@ -184,7 +186,7 @@ function Write-EscReport {
     )
     $date = Get-Date -Format "yyyy-MM-dd"
     $lines = @()
-    $lines += "# Dev Escalations Report — $date"
+    $lines += "# Dev Escalations Report $emDash $date"
 
     # Group entries by section, preserving order
     $sections = [ordered]@{}
@@ -204,9 +206,9 @@ function Write-EscReport {
         $lines += "|-------|-------------|-------------|----------|"
 
         foreach ($entry in $sections[$sectionName]) {
-            $title = $entry.Title -replace '\|', '¦'
-            $desc = $entry.Description -replace '\|', '¦'
-            $fix = $entry.FixVersion -replace '\|', '¦'
+            $title = $entry.Title -replace '\|', $brokenBar
+            $desc = $entry.Description -replace '\|', $brokenBar
+            $fix = $entry.FixVersion -replace '\|', $brokenBar
             if ($entry.HasJiraLink -and $entry.Url) {
                 $jiraCol = "[$($entry.Key)]($($entry.Url))"
             } else {
@@ -223,11 +225,11 @@ function Write-EscReport {
     Set-Content -Path $Path -Value ($lines -join "`n") -Encoding UTF8
 }
 
-# ═════════════════════════════════════════════════════════════════════════
+# =========================================================================
 # MAIN
-# ═══════════════════════════════════════════════════════════════════════════
+# =========================================================================
 
-Write-Host "`n══ Dev Escalations Report Update ══" -ForegroundColor Cyan
+Write-Host "`n== Dev Escalations Report Update ==" -ForegroundColor Cyan
 Write-Host "Looking back $Days day(s) for new escalations`n" -ForegroundColor Cyan
 
 # 1. Read existing report
@@ -238,6 +240,7 @@ Write-Host "Existing entries in report: $($existingEntries.Count)" -ForegroundCo
 #    Only drop Jira-linked entries where the Fix Version is clearly not TBC.
 #    (We treat any Fix Version containing 'TBC' as unresolved.)
 $keepEntries = @()
+$droppedKeys = @{}  # track dropped keys so they aren't re-added as new
 $droppedCount = 0
 foreach ($entry in $existingEntries) {
     $fixText = ("$($entry.FixVersion)").Trim()
@@ -247,7 +250,8 @@ foreach ($entry in $existingEntries) {
     $hasCommunicatedFixVersion = $entry.HasJiraLink -and -not [string]::IsNullOrWhiteSpace($fixText) -and -not $isFreetext
 
     if ($hasCommunicatedFixVersion) {
-        Write-Host "  Dropping (fix version communicated): $($entry.Key) — $($entry.FixVersion)" -ForegroundColor DarkGray
+        Write-Host "  Dropping (fix version communicated): $($entry.Key) $emDash $($entry.FixVersion)" -ForegroundColor DarkGray
+        if ($entry.Key) { $droppedKeys[$entry.Key] = $true }
         $droppedCount++
     } else {
         $keepEntries += $entry
@@ -267,7 +271,7 @@ foreach ($entry in $keepEntries) {
         try {
             $issue = Get-JiraIssue -Key $entry.Key
             $entry.Title = $issue.fields.summary
-            # Preserve manually edited description — only set if it was empty
+            # Preserve manually edited description - only set if it was empty
             if ([string]::IsNullOrWhiteSpace($entry.Description) -or $entry.Description -eq "-") {
                 $entry.Description = Get-PlainTextFromAdf -Adf $issue.fields.description
                 if ([string]::IsNullOrWhiteSpace($entry.Description)) { $entry.Description = "-" }
@@ -300,6 +304,10 @@ foreach ($issue in $newIssues) {
         Write-Host "  Skipping $key (already in report)" -ForegroundColor DarkGray
         continue
     }
+    if ($droppedKeys.ContainsKey($key)) {
+        Write-Host "  Skipping $key (dropped this run)" -ForegroundColor DarkGray
+        continue
+    }
     $existingKeys[$key] = $true
 
     $desc = Get-PlainTextFromAdf -Adf $issue.fields.description
@@ -327,7 +335,7 @@ foreach ($issue in $newIssues) {
         HasJiraLink = $true
     }
     $updatedEntries += $newEntry
-    Write-Host "  + $key — $($newEntry.Title)" -ForegroundColor Green
+    Write-Host "  + $key $emDash $($newEntry.Title)" -ForegroundColor Green
     $addedCount++
 }
 
@@ -345,7 +353,7 @@ $dateStamp = Get-Date -Format "yyyy-MM-dd"
 $archivePath = Join-Path $reportsDir "escalations-$dateStamp.md"
 Copy-Item -Path $ReportPath -Destination $archivePath -Force
 
-Write-Host "`n══ Report Updated ══" -ForegroundColor Cyan
+Write-Host "`n== Report Updated ==" -ForegroundColor Cyan
 Write-Host "  Report:         $ReportPath" -ForegroundColor Green
 Write-Host "  Archived copy:  $archivePath" -ForegroundColor Green
 Write-Host "  Total entries:   $($updatedEntries.Count)" -ForegroundColor Green
