@@ -39,7 +39,7 @@
 | Courier Integration // DX Freight - BT customs for Windsor Framework | Balfes use DX for shipping bikes. We need to add support for Customs info for BT/JE/GY. | TBC | [CLOUDPOS-11627](https://citruslime.atlassian.net/browse/CLOUDPOS-11627) |
 | CitrusStore // Rebuild all SQL indexes nightly - Hangfire Job | Mailer went out, big spike in traffic and CPU. Level of traffic and fragmented indexes playing a part. More cores added, and work ongoing about fragmented indexes. | TBC | [CLECOM-10930](https://citruslime.atlassian.net/browse/CLECOM-10930) |
 | Checkout (?) // GA4 Issues - January 2026 | Ben and I had a discussion about further GA4 issues which have been raised recently by Tier 1s. We are making a plan to resolve, liaising with DMS about any other issues. | TBC | [CLECOM-11055](https://citruslime.atlassian.net/browse/CLECOM-11055) |
-| Gift Vouchers // Gift Voucher expiry - POS treats as expired but Back Office shows as valid | Why? What? Replication Steps: LOOM to illustrate:    How? | TBC | [CLOUDPOS-11713](https://citruslime.atlassian.net/browse/CLOUDPOS-11713) |
+| Gift Vouchers // Gift Voucher expiry - POS treats as expired but Back Office shows as valid | There is currently an issue where gift vouchers show as ‘valid’ in Back Office on their expiry date, but then cannot be redeemed on said date. Although it feels like the voucher is valid until the end of that day, the system instead treats it as expired, displaying an error such as: “This voucher has expired". Back Office shows it as valid, but POS says it’s expired. | TBC | [CLOUDPOS-11713](https://citruslime.atlassian.net/browse/CLOUDPOS-11713) |
 
 ---
 *Generated 2026-02-25 12:00 by Update-EscReport.ps1*
