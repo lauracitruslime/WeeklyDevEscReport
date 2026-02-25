@@ -238,11 +238,13 @@ Write-Host "Looking back $Days day(s) for new escalations`n" -ForegroundColor Cy
 
 # 0. Pull latest from GitHub
 Write-Host "Pulling latest from GitHub..." -ForegroundColor Cyan
-try {
-    $pullOutput = git -C $scriptDir pull origin main 2>&1
-    Write-Host "  $pullOutput" -ForegroundColor Gray
-} catch {
-    Write-Host "  Warning: git pull failed: $_" -ForegroundColor Yellow
+$prevEAP = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+$pullOutput = git -C $scriptDir pull origin main 2>&1
+$ErrorActionPreference = $prevEAP
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "  Done" -ForegroundColor Green
+} else {
+    Write-Host "  Warning: git pull failed (exit $LASTEXITCODE)" -ForegroundColor Yellow
 }
 
 # 1. Read existing report
@@ -373,14 +375,16 @@ Copy-Item -Path $ReportPath -Destination $archivePath -Force
 
 # 7. Commit and push to GitHub
 Write-Host "`nPushing to GitHub..." -ForegroundColor Cyan
-try {
-    git -C $scriptDir add escalations-report.md reports/ 2>&1 | Out-Null
-    $dateStampMsg = Get-Date -Format "yyyy-MM-dd HH:mm"
-    git -C $scriptDir commit -m "Report update $dateStampMsg`n`nCo-Authored-By: Oz <oz-agent@warp.dev>" 2>&1 | Out-Null
-    $pushOutput = git -C $scriptDir push origin main 2>&1
+$prevEAP = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+git -C $scriptDir add escalations-report.md reports/ 2>&1 | Out-Null
+$dateStampMsg = Get-Date -Format "yyyy-MM-dd HH:mm"
+git -C $scriptDir commit -m "Report update $dateStampMsg`n`nCo-Authored-By: Oz <oz-agent@warp.dev>" 2>&1 | Out-Null
+git -C $scriptDir push origin main 2>&1 | Out-Null
+$ErrorActionPreference = $prevEAP
+if ($LASTEXITCODE -eq 0) {
     Write-Host "  Pushed to GitHub" -ForegroundColor Green
-} catch {
-    Write-Host "  Warning: git push failed: $_" -ForegroundColor Yellow
+} else {
+    Write-Host "  Warning: git push failed (exit $LASTEXITCODE)" -ForegroundColor Yellow
 }
 
 Write-Host "`n== Report Updated ==" -ForegroundColor Cyan
