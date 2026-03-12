@@ -22,7 +22,7 @@
 
 | Title | Description | Date Created | Fix Version | Jira Key |
 |-------|-------------|--------------|-------------|----------|
-| PIR // Server Times changing - Breaks all eCommerce Hangfire Jobs | Recurrence of the old issue, previously investigated by Michal T. Max picked up investigation this time, and has made changes to resolve this. | 09-03-2026 | Max made changes and sent conclusion y email 12/03/26 | [DEVOP-2304](https://citruslime.atlassian.net/browse/DEVOP-2304) |
+| PIR // Server Times changing - Breaks all eCommerce Hangfire Jobs | Recurrence of the old issue, previously investigated by Michal T. Max picked up investigation this time, and has made changes to resolve this. | 09-03-2026 | Max made changes and sent conclusion by email 12/03/26 | [DEVOP-2304](https://citruslime.atlassian.net/browse/DEVOP-2304) |
 
 ## Issues with no ETA on Last Report
 
