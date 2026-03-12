@@ -150,14 +150,26 @@ function Read-EscReport {
         if ($line -match '^\|\s*Title\s*\|') { continue }
         if ($line -match '^\|\s*-') { continue }
 
-        # Parse table row: | Title | Description | Fix Version | Jira Key |
+        # Parse table row: supports both old and new formats
+        # Old: | Title | Description | Fix Version | Jira Key |
+        # New: | Title | Description | Date Created | Fix Version | Jira Key |
         $cells = $line -split '\|'
         if ($cells.Count -lt 5) { continue }
 
         $titleCell = $cells[1].Trim() -replace [char]0x00A6, '|'   # unescape ¦
         $descCell  = $cells[2].Trim() -replace [char]0x00A6, '|'
-        $fixCell   = $cells[3].Trim() -replace [char]0x00A6, '|'
-        $jiraCell  = $cells[4].Trim()
+        
+        # Detect format: if we have 6+ cells, it's the new format with Date Created
+        if ($cells.Count -ge 6) {
+            $dateCell  = $cells[3].Trim() -replace [char]0x00A6, '|'
+            $fixCell   = $cells[4].Trim() -replace [char]0x00A6, '|'
+            $jiraCell  = $cells[5].Trim()
+        } else {
+            # Old format - no date column
+            $dateCell  = "-"
+            $fixCell   = $cells[3].Trim() -replace [char]0x00A6, '|'
+            $jiraCell  = $cells[4].Trim()
+        }
 
         # Parse Jira key/url from the Jira Key column
         $key = $null; $url = $null; $hasLink = $false
@@ -171,6 +183,7 @@ function Read-EscReport {
             Title       = $titleCell
             ReportedBy  = ""
             Description = $descCell
+            DateCreated = if ($dateCell) { $dateCell } else { "-" }
             FixVersion  = $fixCell
             Key         = $key
             Url         = $url
@@ -206,19 +219,20 @@ function Write-EscReport {
         $lines += ""
         $lines += "## $sectionName"
         $lines += ""
-        $lines += "| Title | Description | Fix Version | Jira Key |"
-        $lines += "|-------|-------------|-------------|----------|"
+        $lines += "| Title | Description | Date Created | Fix Version | Jira Key |"
+        $lines += "|-------|-------------|--------------|-------------|----------|"
 
         foreach ($entry in $sections[$sectionName]) {
             $title = $entry.Title -replace '\|', $brokenBar
             $desc = $entry.Description -replace '\|', $brokenBar
+            $dateCreated = if ($entry.DateCreated) { $entry.DateCreated } else { "-" }
             $fix = $entry.FixVersion -replace '\|', $brokenBar
             if ($entry.HasJiraLink -and $entry.Url) {
                 $jiraCol = "[$($entry.Key)]($($entry.Url))"
             } else {
                 $jiraCol = if ($entry.Key) { $entry.Key } else { "-" }
             }
-            $lines += "| $title | $desc | $fix | $jiraCol |"
+            $lines += "| $title | $desc | $dateCreated | $fix | $jiraCol |"
         }
     }
 
@@ -296,6 +310,12 @@ foreach ($entry in $keepEntries) {
                 $entry.Description = Get-PlainTextFromAdf -Adf $issue.fields.description
                 if ([string]::IsNullOrWhiteSpace($entry.Description)) { $entry.Description = "-" }
             }
+            # Set DateCreated if not already set
+            if ([string]::IsNullOrWhiteSpace($entry.DateCreated) -or $entry.DateCreated -eq "-") {
+                if ($issue.fields.created) {
+                    $entry.DateCreated = ([datetime]$issue.fields.created).ToString("yyyy-MM-dd")
+                }
+            }
             $entry.FixVersion = Get-FixVersionText -FixVersions $issue.fields.fixVersions
             Write-Host " $($entry.FixVersion)" -ForegroundColor Green
         } catch {
@@ -344,10 +364,14 @@ foreach ($issue in $newIssues) {
     # Use Jira reporter as initial "Reported by"
     $reporter = if ($issue.fields.reporter) { $issue.fields.reporter.displayName } else { "-" }
 
+    # Format created date
+    $createdDate = if ($issue.fields.created) { ([datetime]$issue.fields.created).ToString("yyyy-MM-dd") } else { "-" }
+
     $newEntry = [PSCustomObject]@{
         Title       = $issue.fields.summary
         ReportedBy  = $reporter
         Description = $desc
+        DateCreated = $createdDate
         FixVersion  = Get-FixVersionText -FixVersions $issue.fields.fixVersions
         Key         = $key
         Url         = "$jiraBase/browse/$key"
