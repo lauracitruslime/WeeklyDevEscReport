@@ -313,7 +313,7 @@ foreach ($entry in $keepEntries) {
             # Set DateCreated if not already set
             if ([string]::IsNullOrWhiteSpace($entry.DateCreated) -or $entry.DateCreated -eq "-") {
                 if ($issue.fields.created) {
-                    $entry.DateCreated = ([datetime]$issue.fields.created).ToString("yyyy-MM-dd")
+                    $entry.DateCreated = ([datetime]$issue.fields.created).ToString("dd-MM-yyyy")
                 }
             }
             $entry.FixVersion = Get-FixVersionText -FixVersions $issue.fields.fixVersions
@@ -365,7 +365,7 @@ foreach ($issue in $newIssues) {
     $reporter = if ($issue.fields.reporter) { $issue.fields.reporter.displayName } else { "-" }
 
     # Format created date
-    $createdDate = if ($issue.fields.created) { ([datetime]$issue.fields.created).ToString("yyyy-MM-dd") } else { "-" }
+    $createdDate = if ($issue.fields.created) { ([datetime]$issue.fields.created).ToString("dd-MM-yyyy") } else { "-" }
 
     $newEntry = [PSCustomObject]@{
         Title       = $issue.fields.summary
